@@ -232,7 +232,8 @@ tests:
 		}
 
 		if extKey.Depth() != uint8(len(test.path)) {
-			t.Errorf("Depth of key %d should match fixture path")
+			t.Errorf("Depth of key %d should match fixture path: %v",
+				extKey.Depth(), len(test.path))
 			continue
 		}
 
@@ -856,7 +857,7 @@ func TestErrors(t *testing.T) {
 		{
 			name: "pubkey not on curve",
 			key:  "xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ1hr9Rwbk95YadvBkQXxzHBSngB8ndpW6QH7zhhsXZ2jHyZqPjk",
-			err:  errors.New("pubkey isn't on secp256k1 curve"),
+			err:  errors.New("invalid square root"),
 		},
 		{
 			name:      "unsupported version",
