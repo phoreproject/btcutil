@@ -12,7 +12,7 @@ import (
 	"sort"
 
 	"github.com/aead/siphash"
-	"github.com/btcsuite/btcd/wire"
+	"github.com/phoreproject/btcd/wire"
 	"github.com/kkdai/bstream"
 )
 
@@ -52,6 +52,7 @@ const (
 // number to reduce, and our modulus N divided into its high 32-bits and lower
 // 32-bits.
 func fastReduction(v, nHi, nLo uint64) uint64 {
+
 	// First, we'll spit the item we need to reduce into its higher and
 	// lower bits.
 	vhi := v >> 32
@@ -81,17 +82,16 @@ func fastReduction(v, nHi, nLo uint64) uint64 {
 // in building the filter is required in order to match filter values and is
 // not included in the serialized form.
 type Filter struct {
-	n         uint32
-	p         uint8
-	modulusNP uint64
-
+	n          uint32
+	p          uint8
+	modulusNP  uint64
 	filterData []byte
 }
 
 // BuildGCSFilter builds a new GCS filter with the collision probability of
 // `1/(2**P)`, key `key`, and including every `[]byte` in `data` as a member of
 // the set.
-func BuildGCSFilter(P uint8, M uint64, key [KeySize]byte, data [][]byte) (*Filter, error) {
+func BuildGCSFilter(P uint8, key [KeySize]byte, data [][]byte) (*Filter, error) {
 	// Some initial parameter checks: make sure we have data from which to
 	// build the filter, and make sure our parameters will fit the hash
 	// function we're using.
@@ -107,11 +107,7 @@ func BuildGCSFilter(P uint8, M uint64, key [KeySize]byte, data [][]byte) (*Filte
 		n: uint32(len(data)),
 		p: P,
 	}
-
-	// First we'll compute the value of m, which is the modulus we use
-	// within our finite field. We want to compute: mScalar * 2^P. We use
-	// math.Round in order to round the value up, rather than down.
-	f.modulusNP = uint64(f.n) * M
+	f.modulusNP = uint64(f.n) << P
 
 	// Shortcut if the filter is empty.
 	if f.n == 0 {
@@ -146,7 +142,7 @@ func BuildGCSFilter(P uint8, M uint64, key [KeySize]byte, data [][]byte) (*Filte
 	for _, v := range values {
 		// Calculate the difference between this value and the last,
 		// modulo P.
-		remainder = (v - lastValue) & ((uint64(1) << f.p) - 1)
+		remainder = (v - lastValue) & ((uint64(1) << P) - 1)
 
 		// Calculate the difference between this value and the last,
 		// divided by P.
@@ -174,7 +170,8 @@ func BuildGCSFilter(P uint8, M uint64, key [KeySize]byte, data [][]byte) (*Filte
 
 // FromBytes deserializes a GCS filter from a known N, P, and serialized filter
 // as returned by Bytes().
-func FromBytes(N uint32, P uint8, M uint64, d []byte) (*Filter, error) {
+func FromBytes(N uint32, P uint8, d []byte) (*Filter, error) {
+
 	// Basic sanity check.
 	if P > 32 {
 		return nil, ErrPTooBig
@@ -185,11 +182,7 @@ func FromBytes(N uint32, P uint8, M uint64, d []byte) (*Filter, error) {
 		n: N,
 		p: P,
 	}
-
-	// First we'll compute the value of m, which is the modulus we use
-	// within our finite field. We want to compute: mScalar * 2^P. We use
-	// math.Round in order to round the value up, rather than down.
-	f.modulusNP = uint64(f.n) * M
+	f.modulusNP = uint64(f.n) << P
 
 	// Copy the filter.
 	f.filterData = make([]byte, len(d))
@@ -200,7 +193,7 @@ func FromBytes(N uint32, P uint8, M uint64, d []byte) (*Filter, error) {
 
 // FromNBytes deserializes a GCS filter from a known P, and serialized N and
 // filter as returned by NBytes().
-func FromNBytes(P uint8, M uint64, d []byte) (*Filter, error) {
+func FromNBytes(P uint8, d []byte) (*Filter, error) {
 	buffer := bytes.NewBuffer(d)
 	N, err := wire.ReadVarInt(buffer, varIntProtoVer)
 	if err != nil {
@@ -209,7 +202,34 @@ func FromNBytes(P uint8, M uint64, d []byte) (*Filter, error) {
 	if N >= (1 << 32) {
 		return nil, ErrNTooBig
 	}
-	return FromBytes(uint32(N), P, M, buffer.Bytes())
+	return FromBytes(uint32(N), P, buffer.Bytes())
+}
+
+// FromPBytes deserializes a GCS filter from a known N, and serialized P and
+// filter as returned by NBytes().
+func FromPBytes(N uint32, d []byte) (*Filter, error) {
+	return FromBytes(N, d[0], d[1:])
+}
+
+// FromNPBytes deserializes a GCS filter from a serialized N, P, and filter as
+// returned by NPBytes().
+func FromNPBytes(d []byte) (*Filter, error) {
+	buffer := bytes.NewBuffer(d)
+
+	N, err := wire.ReadVarInt(buffer, varIntProtoVer)
+	if err != nil {
+		return nil, err
+	}
+	if N >= (1 << 32) {
+		return nil, ErrNTooBig
+	}
+
+	P, err := buffer.ReadByte()
+	if err != nil {
+		return nil, err
+	}
+
+	return FromBytes(uint32(N), P, buffer.Bytes())
 }
 
 // Bytes returns the serialized format of the GCS filter, which does not
@@ -286,6 +306,7 @@ func (f *Filter) N() uint32 {
 // Match checks whether a []byte value is likely (within collision probability)
 // to be a member of the set represented by the filter.
 func (f *Filter) Match(key [KeySize]byte, data []byte) (bool, error) {
+
 	// Create a filter bitstream.
 	filterData, err := f.Bytes()
 	if err != nil {
@@ -333,6 +354,7 @@ func (f *Filter) Match(key [KeySize]byte, data []byte) (bool, error) {
 // probability) to be a member of the set represented by the filter faster than
 // calling Match() for each value individually.
 func (f *Filter) MatchAny(key [KeySize]byte, data [][]byte) (bool, error) {
+
 	// Basic sanity check.
 	if len(data) == 0 {
 		return false, nil
