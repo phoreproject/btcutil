@@ -17,6 +17,26 @@ import (
 	"golang.org/x/crypto/ripemd160"
 )
 
+type CustomParamStruct struct {
+	PubKeyHashAddrID byte
+	ScriptHashAddrID byte
+}
+
+var CustomParams = CustomParamStruct{
+	PubKeyHashAddrID: 0x30, // starts with L
+	ScriptHashAddrID: 0x32, // starts with M
+}
+
+// We use this function to be able to test functionality in DecodeAddress for
+// defaultNet addresses
+func applyCustomParams(params chaincfg.Params, customParams CustomParamStruct) chaincfg.Params {
+	params.PubKeyHashAddrID = customParams.PubKeyHashAddrID
+	params.ScriptHashAddrID = customParams.ScriptHashAddrID
+	return params
+}
+
+var customParams = applyCustomParams(chaincfg.MainNetParams, CustomParams)
+
 func TestAddresses(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -64,6 +84,43 @@ func TestAddresses(t *testing.T) {
 			},
 			net: &chaincfg.MainNetParams,
 		},
+		{
+			name:    "litecoin mainnet p2pkh",
+			addr:    "LM2WMpR1Rp6j3Sa59cMXMs1SPzj9eXpGc1",
+			encoded: "LM2WMpR1Rp6j3Sa59cMXMs1SPzj9eXpGc1",
+			valid:   true,
+			result: btcutil.TstAddressPubKeyHash(
+				[ripemd160.Size]byte{
+					0x13, 0xc6, 0x0d, 0x8e, 0x68, 0xd7, 0x34, 0x9f, 0x5b, 0x4c,
+					0xa3, 0x62, 0xc3, 0x95, 0x4b, 0x15, 0x04, 0x50, 0x61, 0xb1},
+				CustomParams.PubKeyHashAddrID),
+			f: func() (btcutil.Address, error) {
+				pkHash := []byte{
+					0x13, 0xc6, 0x0d, 0x8e, 0x68, 0xd7, 0x34, 0x9f, 0x5b, 0x4c,
+					0xa3, 0x62, 0xc3, 0x95, 0x4b, 0x15, 0x04, 0x50, 0x61, 0xb1}
+				return btcutil.NewAddressPubKeyHash(pkHash, &customParams)
+			},
+			net: &customParams,
+		},
+		{
+			name:    "testnet p2pkh",
+			addr:    "mrX9vMRYLfVy1BnZbc5gZjuyaqH3ZW2ZHz",
+			encoded: "mrX9vMRYLfVy1BnZbc5gZjuyaqH3ZW2ZHz",
+			valid:   true,
+			result: btcutil.TstAddressPubKeyHash(
+				[ripemd160.Size]byte{
+					0x78, 0xb3, 0x16, 0xa0, 0x86, 0x47, 0xd5, 0xb7, 0x72, 0x83,
+					0xe5, 0x12, 0xd3, 0x60, 0x3f, 0x1f, 0x1c, 0x8d, 0xe6, 0x8f},
+				chaincfg.TestNet3Params.PubKeyHashAddrID),
+			f: func() (btcutil.Address, error) {
+				pkHash := []byte{
+					0x78, 0xb3, 0x16, 0xa0, 0x86, 0x47, 0xd5, 0xb7, 0x72, 0x83,
+					0xe5, 0x12, 0xd3, 0x60, 0x3f, 0x1f, 0x1c, 0x8d, 0xe6, 0x8f}
+				return btcutil.NewAddressPubKeyHash(pkHash, &chaincfg.TestNet3Params)
+			},
+			net: &chaincfg.TestNet3Params,
+		},
+
 		// Negative P2PKH tests.
 		{
 			name:  "p2pkh wrong hash length",
@@ -125,6 +182,24 @@ func TestAddresses(t *testing.T) {
 				return btcutil.NewAddressScriptHash(script, &chaincfg.MainNetParams)
 			},
 			net: &chaincfg.MainNetParams,
+		},
+		{
+			name:    "litecoin mainnet P2SH ",
+			addr:    "MVcg9uEvtWuP5N6V48EHfEtbz48qR8TKZ9",
+			encoded: "MVcg9uEvtWuP5N6V48EHfEtbz48qR8TKZ9",
+			valid:   true,
+			result: btcutil.TstAddressScriptHash(
+				[ripemd160.Size]byte{
+					0xee, 0x34, 0xac, 0x67, 0x6b, 0xda, 0xf6, 0xe3, 0x70, 0xc8,
+					0xc8, 0x20, 0xb9, 0x48, 0xed, 0xfa, 0xd3, 0xa8, 0x73, 0xd8},
+				CustomParams.ScriptHashAddrID),
+			f: func() (btcutil.Address, error) {
+				pkHash := []byte{
+					0xEE, 0x34, 0xAC, 0x67, 0x6B, 0xDA, 0xF6, 0xE3, 0x70, 0xC8,
+					0xC8, 0x20, 0xB9, 0x48, 0xED, 0xFA, 0xD3, 0xA8, 0x73, 0xD8}
+				return btcutil.NewAddressScriptHashFromHash(pkHash, &customParams)
+			},
+			net: &customParams,
 		},
 		{
 			// Taken from transactions:
